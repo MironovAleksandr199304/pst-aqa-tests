@@ -1,6 +1,6 @@
 # PST AQA Tests
 
-Учебный AQA-проект для практики автоматизации тестирования на Python.
+Учебный AQA-проект для практики автоматизации тестирования API на Python.
 
 В качестве тестового стенда используется Practice Software Testing:
 
@@ -8,7 +8,7 @@
 - API: https://api.practicesoftwaretesting.com
 - Swagger: https://api.practicesoftwaretesting.com/api/documentation
 
-Цель проекта — постепенно собрать понятный automation framework для тестирования API, UI и интеграций с БД.
+Цель проекта — постепенно собрать понятный API automation framework: от простых `requests`-тестов до более структурированного проекта с client layer, fixtures, DB-проверками и дальнейшим переходом к UI-автоматизации.
 
 ---
 
@@ -22,187 +22,398 @@
 
 Планируемый стек по мере развития проекта:
 
-- Playwright — для UI-тестов
 - psycopg2 — для проверок БД
-- jsonschema / pydantic — для контрактных проверок
+- Playwright — для UI-тестов
 - Allure — для отчетности
 - GitHub Actions — для запуска тестов в CI
-- pytest-asyncio / async Python — для изучения асинхронного тестирования
-- gRPC — для практики тестирования RPC-сервисов
-- Locust / k6 — для базового нагрузочного тестирования
 
 ---
 
 ## Что уже реализовано
 
-На текущем этапе проект содержит первые API-тесты и начальный слой helper-функций.
+На текущем этапе реализованы базовые API-тесты и первый слой переиспользуемых contract/assertion helper'ов.
 
 Реализовано:
 
 - smoke-проверки публичных GET endpoint'ов;
 - проверка ожидаемых HTTP status codes;
 - параметризация smoke-тестов через `pytest.mark.parametrize`;
-- первая контрактная проверка ответа `GET /brands`;
-- проверка структуры JSON-ответа;
-- проверка, что response является `list`;
-- проверка, что список не пустой;
-- проверка всех объектов в списке через `for` и `enumerate`;
+- работа с `response.json()`;
+- проверка JSON-структур `dict` и `list`;
+- проверка всех элементов списка через `for` и `enumerate`;
+- контрактная проверка `GET /brands`;
+- контрактная проверка `GET /products`;
 - проверка обязательных полей;
 - проверка типов данных;
-- проверка непустых значений;
+- проверка непустых строковых значений;
 - вынос повторяющихся assert'ов в helper-функции;
-- разделение проверок на field-level helper и entity-level helper.
+- разделение проверок на:
+  - field-level helpers;
+  - entity-level helpers;
+  - endpoint-level tests.
 
-Пример проверяемой логики:
+---
+
+## Текущая структура проекта
 
 ```text
-GET /brands
-→ status code 200
-→ response является list
-→ список не пустой
-→ каждый элемент списка является brand object
-→ у каждого brand есть поля id, name, slug
-→ поля id, name, slug имеют тип str
-→ поля id, name, slug не пустые
-Текущая структура проекта
 pst-aqa-tests/
   helpers/
     __init__.py
     assert_required_string_field.py
+    assert_required_number_field.py
+    assert_required_bool_field.py
+    assert_required_dict_field.py
+    assert_required_list_field.py
     assert_brand_contract.py
+    assert_product_contract.py
 
   tests/
     test_smoke_get.py
     test_brands_contract.py
     test_brands_contract_all_items.py
+    test_products_contract.py
 
   requirements.txt
   pytest.ini
   README.md
   .gitignore
-Helper-слой
+```
 
-В проекте появился первый слой переиспользуемых проверок.
+---
 
-Field-level helper
+## Helper-слой
 
-assert_required_string_field проверяет одно обязательное строковое поле:
+В проекте появился первый набор универсальных проверок.
 
+### Field-level helpers
+
+Field-level helpers проверяют отдельные поля в JSON-объекте.
+
+Реализованы:
+
+```text
+assert_required_string_field
+assert_required_number_field
+assert_required_bool_field
+assert_required_dict_field
+assert_required_list_field
+```
+
+Они проверяют:
+
+```text
 поле существует
-поле имеет тип str
-поле не пустое
+значение имеет ожидаемый тип
+строковое значение не пустое
+```
 
-Этот helper не знает ничего о конкретной ручке или сущности. Он универсальный и может использоваться для разных объектов.
+Для числовых полей отдельно учитывается особенность Python: `bool` является наследником `int`, поэтому `True` и `False` не должны проходить как валидное числовое значение.
 
-Entity-level helper
+---
 
-assert_brand_contract проверяет структуру объекта brand:
+### Entity-level helpers
 
-brand содержит id
-brand содержит name
-brand содержит slug
+Entity-level helpers проверяют структуру конкретной сущности.
+
+Реализованы:
+
+```text
+assert_brand_contract
+assert_product_contract
+```
+
+`assert_brand_contract` проверяет объект `brand` из ответа `/brands`:
+
+```text
+id    string
+name  string
+slug  string
+```
+
+`assert_product_contract` проверяет верхний уровень объекта `product` из ответа `/products`:
+
+```text
+id                  string
+name                string
+description         string
+price               number
+is_location_offer   bool
+is_rental           bool
+co2_rating          string
+in_stock            bool
+is_eco_friendly     bool
+product_image       dict
+category            dict
+brand               dict
+```
+
+Пока вложенные объекты `product_image`, `category` и `brand` проверяются только как `dict`. Их внутренние контракты будут добавлены следующим этапом.
+
+---
+
+## Проверяемые endpoint'ы
+
+### GET /brands
+
+Проверяется:
+
+```text
+response является list
+список не пустой
+каждый элемент списка является brand object
+у каждого brand есть id, name, slug
 id/name/slug являются строками
 id/name/slug не пустые
+```
 
-Внутри assert_brand_contract используется универсальный helper assert_required_string_field.
+---
 
-Такой подход позволяет держать тесты более читаемыми: тест описывает сценарий, а детали проверки структуры вынесены в helper-функции.
+### GET /products
 
-Пример архитектурного подхода
+Проверяется структура paginated/object response:
+
+```text
+response является dict
+response["data"] существует
+response["data"] является list
+response["data"] не пустой
+каждый элемент response["data"] является product object
+каждый product соответствует базовому product contract
+```
+
+Текущая модель:
+
+```text
+/products
+response → dict
+response["data"] → list
+product → dict
+```
+
+---
+
+## Архитектурный подход
+
+Проект строится по принципу разделения ответственности.
 
 Тест отвечает за сценарий:
 
-GET /brands должен вернуть непустой список брендов,
-и каждый бренд должен соответствовать контракту brand.
+```text
+отправить запрос
+проверить статус
+проверить верхнюю структуру ответа
+для каждого объекта вызвать contract-check
+```
 
 Entity-helper отвечает за структуру конкретной сущности:
 
-brand должен содержать id, name, slug.
+```text
+brand
+product
+category
+product_image
+```
 
-Field-helper отвечает за атомарную проверку поля:
+Field-helper отвечает за атомарную проверку конкретного поля:
 
-обязательное строковое поле должно существовать,
-быть строкой и быть непустым.
-Установка и запуск
+```text
+поле существует
+поле имеет нужный тип
+поле не пустое, если это обязательная строка
+```
+
+Общая схема:
+
+```text
+test
+  → entity-helper
+    → field-helper
+```
+
+Пример:
+
+```text
+test_products_contract_all_items
+  → assert_product_contract
+    → assert_required_string_field
+    → assert_required_number_field
+    → assert_required_bool_field
+    → assert_required_dict_field
+```
+
+Такой подход позволяет держать тесты читаемыми, а повторяющуюся логику проверок — переиспользуемой.
+
+---
+
+## Установка и запуск
 
 Клонировать репозиторий:
 
+```bash
 git clone https://github.com/MironovAleksandr199304/pst-aqa-tests.git
 cd pst-aqa-tests
+```
 
 Создать виртуальное окружение:
 
+```bash
 python -m venv .venv
+```
 
 Активировать виртуальное окружение на Windows:
 
+```bash
 .venv\Scripts\activate
+```
 
 Установить зависимости:
 
+```bash
 pip install -r requirements.txt
+```
 
 Запустить все тесты:
 
+```bash
 pytest
+```
 
 Запустить тесты с подробным выводом:
 
+```bash
 pytest -s -v
+```
 
 Запустить конкретный файл:
 
+```bash
 pytest tests/test_smoke_get.py -s -v
+```
 
-Запустить контрактную проверку /brands:
+Запустить контрактные проверки `/brands`:
 
+```bash
 pytest tests/test_brands_contract_all_items.py -s -v
-Текущий фокус обучения
+```
+
+Запустить контрактные проверки `/products`:
+
+```bash
+pytest tests/test_products_contract.py -s -v
+```
+
+---
+
+## Текущий фокус обучения
 
 Сейчас проект используется для закрепления базовых навыков API automation:
 
-работа с requests;
-запуск тестов через pytest;
-проверка status_code;
-работа с response.json();
-проверка dict / list;
-проверка обязательных полей;
-проверка типов данных;
-проверка непустых значений;
-параметризация тестов через pytest.mark.parametrize;
-проверка всех элементов списка через for и enumerate;
-диагностика падений через сообщения в assert;
-вынос повторяющихся проверок в helper-функции;
-разделение тестовой логики на уровни: test → entity-helper → field-helper.
-Roadmap
+- работа с `requests`;
+- запуск тестов через `pytest`;
+- проверка `status_code`;
+- работа с `response.json()`;
+- проверка `dict` / `list`;
+- проверка обязательных полей;
+- проверка типов данных;
+- проверка непустых значений;
+- параметризация тестов;
+- проверка всех элементов списка через `for` и `enumerate`;
+- диагностика падений через сообщения в `assert`;
+- вынос повторяющихся проверок в helper-функции;
+- разделение тестовой логики на уровни:
+  - test;
+  - entity-helper;
+  - field-helper.
 
-Ближайшие шаги:
+---
 
-добавить контрактные проверки для /products;
-проверить вложенные объекты brand, category, product_image;
-добавить helper для обязательных числовых полей;
-добавить helper для обязательных boolean-полей;
-добавить helper для проверки вложенных dict-объектов;
-привести smoke-тесты и contract-тесты к единому стилю;
-добавить API client layer;
-добавить fixtures;
-добавить негативные API-тесты;
-добавить авторизацию;
-добавить тестовые данные и data builders;
-добавить проверки БД через psycopg2;
-добавить UI-тесты на Playwright;
-добавить Allure-отчеты;
-настроить запуск в GitHub Actions.
+## Roadmap
 
-Дальнейшие направления развития:
+Дальнейшее обучение ведется по следующему порядку.
 
-async Python;
-pytest-asyncio;
-gRPC-тесты;
-базовое нагрузочное тестирование;
-работа с flaky tests;
-подготовка тестовых данных через вспомогательные сервисы/утилиты.
-Важное замечание
+### 1. Добить вложенные contracts для `/products`
+
+Следующие helper'ы:
+
+```text
+assert_product_brand_contract
+assert_product_category_contract
+assert_product_image_contract
+```
+
+Цель — начать проверять не только наличие вложенных объектов, но и их внутреннюю структуру.
+
+---
+
+### 2. Сделать API client layer
+
+Планируемые классы:
+
+```text
+ProductsClient
+BrandsClient
+```
+
+Цель — убрать прямые `requests.get(...)` из тестов и вынести работу с API в отдельный слой.
+
+---
+
+### 3. Ввести pytest fixtures
+
+Планируемые fixtures:
+
+```text
+base_url
+products_client
+brands_client
+test data
+```
+
+Цель — убрать дублирование настроек и подготовить проект к расширению.
+
+---
+
+### 4. Начать psycopg2
+
+План:
+
+```text
+подключение к БД
+SELECT
+проверка одной записи
+helper для fetch_one / fetch_all
+```
+
+---
+
+### 5. Сделать первый API + DB test
+
+Целевая структура теста:
+
+```text
+отправить API-запрос
+проверить response
+проверить данные в БД
+```
+
+---
+
+### 6. Только потом Playwright
+
+После закрепления API/DB базы перейти к UI:
+
+```text
+открыть страницу
+найти элемент
+кликнуть
+проверить текст
+ввести Page Object
+```
+
+---
+
+## Важное замечание
 
 Это учебный проект, а не production-ready framework.
 
