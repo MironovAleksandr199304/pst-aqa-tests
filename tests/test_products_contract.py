@@ -1,10 +1,11 @@
-import requests
+from clients.products_client import ProductsClient
 from helpers.assert_product_contract import assert_product_contract
 from helpers.assert_required_list_field import assert_required_list_field
 
+
 def test_products_contract_all_items():
-    base_url = "https://api.practicesoftwaretesting.com"
-    response = requests.get(base_url + "/products", timeout=10)
+    client = ProductsClient("https://api.practicesoftwaretesting.com")
+    response = client.get_products()
 
     assert response.status_code == 200
 
