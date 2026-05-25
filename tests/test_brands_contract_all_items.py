@@ -1,10 +1,8 @@
-from clients.brands_client import BrandsClient
 from helpers.assert_brand_contract import assert_brand_contract
 
 
-def test_brands_contract_all_items():
-    client = BrandsClient("https://api.practicesoftwaretesting.com")
-    response = client.get_brands()
+def test_brands_contract_all_items(brands_client):
+    response = brands_client.get_brands()
     assert response.status_code == 200, (
         f"GET /brands вернул статус {response.status_code}, ожидалось 200."
         f"Body: {response.text[:500]}"

@@ -1,64 +1,68 @@
 # PST AQA Tests
 
-Учебный AQA-проект для практики автоматизации тестирования API на Python.
+Учебный AQA-проект для практики API и DB automation на Python.
 
-В качестве тестового стенда используется Practice Software Testing:
+Тестовый стенд:
 
 - UI: https://practicesoftwaretesting.com/
 - API: https://api.practicesoftwaretesting.com
 - Swagger: https://api.practicesoftwaretesting.com/api/documentation
 
-Цель проекта — постепенно отработать базовые и прикладные навыки API automation: от простых `requests`-тестов до более структурированного проекта с client layer, fixtures, DB-проверками и дальнейшим переходом к UI-автоматизации.
+Для DB-практики используется локальная PostgreSQL, поднятая через Docker Compose.
+
+Цель проекта — постепенно закрепить базовые и прикладные навыки автоматизации: `pytest`, `requests`, contract checks, API client layer, fixtures, `psycopg2`, DB-проверки и дальнейший переход к Playwright.
 
 ---
 
 ## Стек
 
-На текущем этапе используется:
+Текущий стек:
 
 - Python
 - pytest
 - requests
+- psycopg2
+- PostgreSQL
+- Docker Compose
 
-Планируемый стек по мере развития проекта:
+Планируемый стек:
 
-- psycopg2 — для проверок БД;
-- Playwright — для UI-тестов;
-- Allure — для отчетности;
-- GitHub Actions — для запуска тестов в CI.
+- Playwright — для UI-тестов
+- Allure — для отчетности
+- GitHub Actions — для запуска тестов в CI
 
 ---
 
 ## Что уже реализовано
 
-На текущем этапе реализованы базовые API-тесты, contract checks для `/brands` и `/products`, вложенные contract checks для объектов внутри `/products`, а также первый вариант API client layer.
-
 Реализовано:
 
 - smoke-проверки публичных GET endpoint'ов;
-- проверка ожидаемых HTTP status codes;
+- проверка HTTP status codes;
 - параметризация smoke-тестов через `pytest.mark.parametrize`;
 - работа с `response.json()`;
 - проверка JSON-структур `dict` и `list`;
 - проверка всех элементов списка через `for` и `enumerate`;
-- контрактная проверка `GET /brands`;
-- контрактная проверка `GET /products`;
+- contract checks для `GET /brands`;
+- contract checks для `GET /products`;
+- nested contract checks для объектов внутри `/products`;
 - проверка обязательных полей;
 - проверка типов данных;
 - проверка непустых строковых значений;
-- вынос повторяющихся assert'ов в helper-функции;
-- разделение проверок на:
-  - field-level helpers;
-  - entity-level helpers;
-  - nested entity-level helpers;
-  - endpoint-level tests;
-- вложенные contract helpers для объектов внутри `/products`:
-  - `product_image`;
-  - `category`;
-  - `product_brand`;
-- API client layer для основных ресурсов:
-  - `ProductsClient`;
-  - `BrandsClient`.
+- field-level helpers;
+- entity-level helpers;
+- nested entity-level helpers;
+- API client layer;
+- pytest fixtures;
+- локальная PostgreSQL через Docker Compose;
+- DB client layer через `psycopg2`;
+- `fetch_one()` для выборки одной строки;
+- `fetch_all()` для выборки нескольких строк;
+- `execute_query()` для DDL/DML-запросов с `commit`;
+- DB smoke test через `SELECT 1`;
+- DB test на несколько строк через `fetch_all`;
+- DB test с `CREATE TABLE IF NOT EXISTS`, `TRUNCATE`, `INSERT`, `SELECT WHERE`;
+- SQL-параметры через `%s`.
 
 ---
 
@@ -70,6 +74,11 @@ pst-aqa-tests/
     __init__.py
     products_client.py
     brands_client.py
+
+  db/
+    __init__.py
+    db_client.py
+    db_config.py
 
   helpers/
     __init__.py
@@ -90,7 +99,12 @@ pst-aqa-tests/
     test_brands_contract.py
     test_brands_contract_all_items.py
     test_products_contract.py
+    test_db_connection.py
+    test_db_fetch_all.py
+    test_db_insert_select.py
 
+  conftest.py
+  docker-compose.yml
   requirements.txt
   pytest.ini
   README.md
@@ -99,11 +113,9 @@ pst-aqa-tests/
 
 ---
 
-## Client layer
+## API client layer
 
-В проект добавлен первый API client layer.
-
-Client layer отвечает за отправку HTTP-запросов и скрывает прямое использование `requests.get(...)` от тестов.
+API client layer скрывает прямое использование `requests.get(...)` от тестов.
 
 Реализованы:
 
@@ -112,42 +124,108 @@ ProductsClient
 BrandsClient
 ```
 
-`ProductsClient` умеет получать список продуктов:
+`ProductsClient`:
 
 ```text
 get_products()
 ```
 
-`BrandsClient` умеет получать список брендов:
+`BrandsClient`:
 
 ```text
 get_brands()
 ```
 
-До client layer тесты напрямую вызывали `requests.get(...)`.
-
-После добавления client layer тесты используют клиент:
+Схема:
 
 ```text
 test
-  → client.get_products()
+  → fixture
+    → api client
+      → requests
   → response checks
   → contract checks
 ```
 
-Это позволяет разделить ответственность:
+---
+
+## DB layer
+
+DB layer отвечает за подключение к PostgreSQL и выполнение SQL-запросов.
+
+Реализованы:
 
 ```text
-test        → сценарий и проверки
-client      → HTTP-запросы
-helpers     → contract/assertion checks
+db_config.py
+db_client.py
+```
+
+`db_config.py` возвращает параметры подключения:
+
+```text
+host
+port
+dbname
+user
+password
+```
+
+`DbClient` содержит методы:
+
+```text
+get_connection()
+fetch_one(query, params=None)
+fetch_all(query, params=None)
+execute_query(query, params=None)
+```
+
+Назначение методов:
+
+```text
+fetch_one      → SELECT, одна строка результата
+fetch_all      → SELECT, несколько строк результата
+execute_query  → CREATE / TRUNCATE / INSERT / UPDATE / DELETE / DROP + commit
+```
+
+Схема DB-теста:
+
+```text
+test
+  → db_client fixture
+    → DbClient
+      → psycopg2.connect()
+      → cursor.execute()
+      → fetchone / fetchall / commit
+  → assert по результату
 ```
 
 ---
 
-## Helper-слой
+## Pytest fixtures
 
-В проекте есть набор универсальных проверок и contract-helper'ов.
+В `conftest.py` реализованы fixtures:
+
+```text
+base_url
+product_client
+brands_client
+db_config
+db_client
+```
+
+`base_url` хранит базовый адрес API.
+
+`product_client` создает `ProductsClient`.
+
+`brands_client` создает `BrandsClient`.
+
+`db_config` получает конфигурацию подключения к PostgreSQL.
+
+`db_client` создает `DbClient`.
+
+---
+
+## Helper-слой
 
 ### Field-level helpers
 
@@ -171,13 +249,11 @@ assert_required_list_field
 строковое значение не пустое
 ```
 
-Для числовых полей отдельно учитывается особенность Python: `bool` является наследником `int`, поэтому `True` и `False` не должны проходить как валидное числовое значение.
+Для числовых полей учитывается особенность Python: `bool` является наследником `int`, поэтому `True` и `False` не должны проходить как валидное числовое значение.
 
 ---
 
 ### Entity-level helpers
-
-Entity-level helpers проверяют структуру конкретной сущности.
 
 Реализованы:
 
@@ -209,9 +285,9 @@ is_rental           bool
 co2_rating          string
 in_stock            bool
 is_eco_friendly     bool
-product_image       dict + внутренний contract
-category            dict + внутренний contract
-brand               dict + внутренний contract
+product_image       dict + internal contract
+category            dict + internal contract
+brand               dict + internal contract
 ```
 
 `assert_product_brand_contract` проверяет вложенный объект `brand` внутри `/products`:
@@ -260,10 +336,11 @@ id/name/slug являются строками
 id/name/slug не пустые
 ```
 
-Тест использует `BrandsClient`:
+Схема теста:
 
 ```text
 test_brands_contract_all_items
+  → brands_client fixture
   → BrandsClient.get_brands()
   → assert_brand_contract
 ```
@@ -272,7 +349,7 @@ test_brands_contract_all_items
 
 ### GET /products
 
-Проверяется структура paginated/object response:
+Проверяется:
 
 ```text
 response является dict
@@ -284,109 +361,60 @@ response["data"] не пустой
 каждый product содержит валидные вложенные объекты product_image, category и brand
 ```
 
-Текущая модель:
-
-```text
-/products
-response → dict
-response["data"] → list
-product → dict
-  product_image → dict
-  category → dict
-  brand → dict
-```
-
-Тест использует `ProductsClient`:
+Схема теста:
 
 ```text
 test_products_contract_all_items
+  → product_client fixture
   → ProductsClient.get_products()
   → assert_product_contract
-```
-
-Контрактная проверка `/products` успешно проходит:
-
-```text
-tests/test_products_contract.py::test_products_contract_all_items PASSED
-```
-
-Контрактная проверка `/brands` успешно проходит:
-
-```text
-tests/test_brands_contract_all_items.py::test_brands_contract_all_items PASSED
 ```
 
 ---
 
-## Архитектурный подход
+## DB-проверки
 
-Проект строится по принципу разделения ответственности.
+### test_db_connection
 
-Тест отвечает за сценарий:
-
-```text
-создать API client
-получить response через client method
-проверить status_code
-проверить верхнюю структуру ответа
-для каждого объекта вызвать contract-check
-```
-
-Client отвечает за HTTP-запросы:
+Проверяет базовое подключение к PostgreSQL и выполнение простого запроса:
 
 ```text
-ProductsClient
-BrandsClient
+SELECT 1
 ```
 
-Entity-helper отвечает за структуру конкретной сущности:
+Ожидаемый результат:
 
 ```text
-brand
-product
-product_brand
-category
-product_image
+(1,)
 ```
 
-Field-helper отвечает за атомарную проверку конкретного поля:
+---
+
+### test_db_fetch_all
+
+Проверяет работу `fetch_all()` на запросе, который возвращает несколько строк.
+
+Ожидаемый результат по смыслу:
 
 ```text
-поле существует
-поле имеет нужный тип
-поле не пустое, если это обязательная строка
+[(1,), (2,)]
 ```
 
-Общая схема:
+---
+
+### test_db_insert_select
+
+Проверяет базовый сценарий работы с таблицей:
 
 ```text
-test
-  → api client
-    → requests
-  → entity-helper
-    → nested entity-helper
-      → field-helper
+CREATE TABLE IF NOT EXISTS
+TRUNCATE TABLE
+INSERT с параметрами
+SELECT WHERE с параметром
+assert по данным из БД
 ```
 
-Пример для `/products`:
-
-```text
-test_products_contract_all_items
-  → ProductsClient.get_products()
-  → assert_product_contract
-    → assert_required_string_field
-    → assert_required_number_field
-    → assert_required_bool_field
-    → assert_required_dict_field
-    → assert_product_image_contract
-      → assert_required_string_field
-    → assert_product_category_contract
-      → assert_required_string_field
-    → assert_product_brand_contract
-      → assert_required_string_field
-```
-
-Такой подход позволяет держать тесты читаемыми, а повторяющуюся логику запросов и проверок — переиспользуемой.
+Проверяется, что после вставки запись реально доступна через `SELECT`.
 
 ---
 
@@ -429,6 +457,18 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Поднять PostgreSQL через Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+Проверить запущенные контейнеры:
+
+```bash
+docker ps
+```
+
 Запустить все тесты:
 
 ```bash
@@ -439,12 +479,6 @@ pytest
 
 ```bash
 pytest -s -v
-```
-
-Запустить конкретный файл:
-
-```bash
-pytest tests/test_smoke_get.py -s -v
 ```
 
 Запустить контрактные проверки `/brands`:
@@ -459,11 +493,29 @@ pytest tests/test_brands_contract_all_items.py -s -v
 pytest tests/test_products_contract.py -s -v
 ```
 
+Запустить DB smoke test:
+
+```bash
+pytest tests/test_db_connection.py -s -v
+```
+
+Запустить DB test на `fetch_all`:
+
+```bash
+pytest tests/test_db_fetch_all.py -s -v
+```
+
+Запустить DB test на `INSERT` / `SELECT`:
+
+```bash
+pytest tests/test_db_insert_select.py -s -v
+```
+
 ---
 
 ## Текущий фокус обучения
 
-Сейчас проект используется для закрепления навыков API automation:
+Сейчас проект используется для закрепления навыков API и DB automation:
 
 - работа с `requests`;
 - запуск тестов через `pytest`;
@@ -473,30 +525,26 @@ pytest tests/test_products_contract.py -s -v
 - проверка обязательных полей;
 - проверка типов данных;
 - проверка непустых значений;
-- параметризация тестов;
 - проверка всех элементов списка через `for` и `enumerate`;
-- диагностика падений через сообщения в `assert`;
 - вынос повторяющихся проверок в helper-функции;
 - проверка вложенных JSON-объектов через nested contract helpers;
 - вынос HTTP-запросов в API client layer;
-- разделение тестовой логики на уровни:
-  - test;
-  - api client;
-  - entity-helper;
-  - nested entity-helper;
-  - field-helper.
+- использование pytest fixtures;
+- подключение к PostgreSQL через `psycopg2`;
+- выполнение `SELECT` через `fetch_one` и `fetch_all`;
+- выполнение DDL/DML-запросов через `execute_query`;
+- использование `commit` для запросов, меняющих состояние БД;
+- использование параметров SQL-запроса через `%s`.
 
 ---
 
 ## Roadmap
 
-Дальнейшее обучение ведется по следующему порядку.
-
 ### 1. Добить вложенные contracts для `/products`
 
 Статус: выполнено.
 
-Реализованы helper'ы:
+Реализованы:
 
 ```text
 assert_product_brand_contract
@@ -504,75 +552,68 @@ assert_product_category_contract
 assert_product_image_contract
 ```
 
-Цель этапа была в том, чтобы начать проверять не только наличие вложенных объектов, но и их внутреннюю структуру.
-
 ---
 
 ### 2. Сделать API client layer
 
-Статус: базово выполнено.
+Статус: выполнено базово.
 
-Реализованы классы:
+Реализованы:
 
 ```text
 ProductsClient
 BrandsClient
 ```
 
-Цель этапа была в том, чтобы убрать прямые `requests.get(...)` из основных contract-тестов и вынести работу с API в отдельный слой.
-
-Текущая схема:
-
-```text
-test
-  → api client
-    → requests
-  → contract helper
-```
-
 ---
 
 ### 3. Ввести pytest fixtures
 
-Статус: следующий этап.
+Статус: выполнено базово.
 
-Планируемые fixtures:
+Реализованы:
 
 ```text
 base_url
-products_client
+product_client
 brands_client
-test data
+db_config
+db_client
 ```
-
-Цель — убрать дублирование настроек и подготовить проект к расширению.
 
 ---
 
 ### 4. Начать psycopg2
 
-Статус: после fixtures.
+Статус: почти выполнено.
 
-План:
+Реализовано:
 
 ```text
 подключение к БД
 SELECT
-проверка одной записи
-helper для fetch_one / fetch_all
+fetch_one
+fetch_all
+execute_query
+CREATE TABLE IF NOT EXISTS
+TRUNCATE
+INSERT
+SELECT WHERE
+параметры SQL-запроса
 ```
 
 ---
 
-### 5. Сделать первый API + DB test
+### 5. Сделать первый API + DB style test
 
-Статус: после базового psycopg2.
+Статус: следующий этап.
 
 Целевая структура теста:
 
 ```text
 отправить API-запрос
-проверить response
+получить данные из response
+использовать эти данные в DB-сценарии
 проверить данные в БД
 ```
 
