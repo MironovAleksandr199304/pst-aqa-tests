@@ -62,7 +62,9 @@
 - DB smoke test через `SELECT 1`;
 - DB test на несколько строк через `fetch_all`;
 - DB test с `CREATE TABLE IF NOT EXISTS`, `TRUNCATE`, `INSERT`, `SELECT WHERE`;
-- SQL-параметры через `%s`.
+- SQL-параметры через `%s`;
+- первый API + DB style test для `/products`;
+- второй API + DB style test для `/brands`.
 
 ---
 
@@ -102,6 +104,8 @@ pst-aqa-tests/
     test_db_connection.py
     test_db_fetch_all.py
     test_db_insert_select.py
+    test_api_product_saved_to_db.py
+    test_api_brand_saved_to_db.py
 
   conftest.py
   docker-compose.yml
@@ -418,6 +422,50 @@ assert по данным из БД
 
 ---
 
+## API + DB style tests
+
+Эти тесты закрепляют паттерн:
+
+```text
+API response
+  → данные из ответа
+  → INSERT в локальную PostgreSQL
+  → SELECT из БД
+  → сравнение API data и DB data
+```
+
+Важно: это учебный API + DB style pattern. Локальная PostgreSQL не является реальной БД сервиса Practice Software Testing.
+
+### test_api_product_saved_to_db
+
+Сценарий:
+
+```text
+GET /products
+взять первый product из response["data"]
+создать таблицу test_products
+очистить таблицу
+вставить id, name, price
+сделать SELECT по id
+сравнить данные из БД с API response
+```
+
+### test_api_brand_saved_to_db
+
+Сценарий:
+
+```text
+GET /brands
+взять первый brand из response
+создать таблицу test_brands
+очистить таблицу
+вставить id, name, slug
+сделать SELECT по id
+сравнить данные из БД с API response
+```
+
+---
+
 ## Установка и запуск
 
 Клонировать репозиторий:
@@ -511,6 +559,18 @@ pytest tests/test_db_fetch_all.py -s -v
 pytest tests/test_db_insert_select.py -s -v
 ```
 
+Запустить API + DB style test для `/products`:
+
+```bash
+pytest tests/test_api_product_saved_to_db.py -s -v
+```
+
+Запустить API + DB style test для `/brands`:
+
+```bash
+pytest tests/test_api_brand_saved_to_db.py -s -v
+```
+
 ---
 
 ## Текущий фокус обучения
@@ -534,7 +594,8 @@ pytest tests/test_db_insert_select.py -s -v
 - выполнение `SELECT` через `fetch_one` и `fetch_all`;
 - выполнение DDL/DML-запросов через `execute_query`;
 - использование `commit` для запросов, меняющих состояние БД;
-- использование параметров SQL-запроса через `%s`.
+- использование параметров SQL-запроса через `%s`;
+- связывание API response и DB-проверок в одном тесте.
 
 ---
 
@@ -585,7 +646,7 @@ db_client
 
 ### 4. Начать psycopg2
 
-Статус: почти выполнено.
+Статус: выполнено базово.
 
 Реализовано:
 
@@ -606,22 +667,51 @@ SELECT WHERE
 
 ### 5. Сделать первый API + DB style test
 
-Статус: следующий этап.
+Статус: выполнено базово.
 
-Целевая структура теста:
+Реализованы:
 
 ```text
-отправить API-запрос
-получить данные из response
-использовать эти данные в DB-сценарии
-проверить данные в БД
+test_api_product_saved_to_db
+test_api_brand_saved_to_db
 ```
 
 ---
 
-### 6. Только потом Playwright
+### 6. Negative API tests
 
-Статус: после API/DB базы.
+Статус: следующий этап.
+
+План:
+
+```text
+добавить методы get_product_by_id / get_brand_by_id при необходимости
+проверить несуществующий id
+проверить ожидаемый 4xx status code
+проверить body ошибки, если он есть
+```
+
+---
+
+### 7. POST-сценарии
+
+Статус: после negative tests.
+
+План:
+
+```text
+найти подходящий POST endpoint
+разобрать payload
+добавить метод в client
+отправить POST-запрос
+проверить status code и response body
+```
+
+---
+
+### 8. Playwright
+
+Статус: после API/DB базы и базовых negative/POST API tests.
 
 После закрепления API/DB базы перейти к UI:
 
