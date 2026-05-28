@@ -10,7 +10,7 @@
 
 Для DB-практики используется локальная PostgreSQL, поднятая через Docker Compose.
 
-Цель проекта — постепенно закрепить базовые и прикладные навыки автоматизации: `pytest`, `requests`, contract checks, API client layer, fixtures, `psycopg2`, DB-проверки и дальнейший переход к Playwright.
+Цель проекта — постепенно закрепить базовые и прикладные навыки автоматизации: `pytest`, `requests`, contract checks, API client layer, fixtures, `psycopg2`, DB-проверки, negative API tests и дальнейший переход к Playwright.
 
 ---
 
@@ -63,8 +63,11 @@
 - DB test на несколько строк через `fetch_all`;
 - DB test с `CREATE TABLE IF NOT EXISTS`, `TRUNCATE`, `INSERT`, `SELECT WHERE`;
 - SQL-параметры через `%s`;
-- первый API + DB style test для `/products`;
-- второй API + DB style test для `/brands`.
+- API + DB style test для `/products`;
+- API + DB style test для `/brands`;
+- первый negative API test для несуществующего product id;
+- проверка `Content-Type` для JSON error response;
+- проверка error body в negative API test.
 
 ---
 
@@ -106,6 +109,7 @@ pst-aqa-tests/
     test_db_insert_select.py
     test_api_product_saved_to_db.py
     test_api_brand_saved_to_db.py
+    test_product_not_found.py
 
   conftest.py
   docker-compose.yml
@@ -132,6 +136,7 @@ BrandsClient
 
 ```text
 get_products()
+get_product_by_id(product_id)
 ```
 
 `BrandsClient`:
@@ -148,7 +153,7 @@ test
     → api client
       → requests
   → response checks
-  → contract checks
+  → contract / body checks
 ```
 
 ---
@@ -466,6 +471,35 @@ GET /brands
 
 ---
 
+## Negative API tests
+
+### test_product_not_found
+
+Проверяет поведение API при запросе несуществующего product id.
+
+Сценарий:
+
+```text
+GET /products/{invalid_id}
+ожидаемый status code: 404
+ответ должен быть JSON
+error body должен содержать message = "Requested item not found"
+```
+
+Дополнительно проверяется `Content-Type`:
+
+```text
+Content-Type содержит application/json
+```
+
+Для безопасного доступа к заголовку используется паттерн:
+
+```text
+response.headers.get("Content-Type", "").lower()
+```
+
+---
+
 ## Установка и запуск
 
 Клонировать репозиторий:
@@ -571,6 +605,12 @@ pytest tests/test_api_product_saved_to_db.py -s -v
 pytest tests/test_api_brand_saved_to_db.py -s -v
 ```
 
+Запустить negative API test для несуществующего product id:
+
+```bash
+pytest tests/test_product_not_found.py -s -v
+```
+
 ---
 
 ## Текущий фокус обучения
@@ -595,7 +635,9 @@ pytest tests/test_api_brand_saved_to_db.py -s -v
 - выполнение DDL/DML-запросов через `execute_query`;
 - использование `commit` для запросов, меняющих состояние БД;
 - использование параметров SQL-запроса через `%s`;
-- связывание API response и DB-проверок в одном тесте.
+- связывание API response и DB-проверок в одном тесте;
+- negative API testing;
+- проверка JSON error response.
 
 ---
 
@@ -680,15 +722,24 @@ test_api_brand_saved_to_db
 
 ### 6. Negative API tests
 
-Статус: следующий этап.
+Статус: начато.
 
-План:
+Реализовано:
 
 ```text
-добавить методы get_product_by_id / get_brand_by_id при необходимости
-проверить несуществующий id
-проверить ожидаемый 4xx status code
-проверить body ошибки, если он есть
+get_product_by_id(product_id)
+test_product_not_found
+проверка 404
+проверка Content-Type
+проверка JSON error body
+```
+
+Дальше:
+
+```text
+добавить еще negative cases
+проверить несуществующие id для других endpoint'ов
+разобрать 400 / 422 при невалидных данных
 ```
 
 ---
